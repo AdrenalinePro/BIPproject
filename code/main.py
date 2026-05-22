@@ -1,5 +1,8 @@
 import pandas as pd
 from pathlib import Path
+from src.preprocess import *
+
+
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "original_data"
 # 以下是个例子，后面可以删除
