@@ -1,37 +1,56 @@
-import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
-from PIL import Image
+from src.preprocess import load_data, apply_mask, rgb_to_gray
 
 DATA_DIR = Path(__file__).parent.parent / "data" / "original_data"
 RESULT_DIR = Path(__file__).parent.parent / "result"
 RESULT_DIR.mkdir(exist_ok=True)
 
-# 读取标签
-label_df = pd.read_csv(DATA_DIR / "label.csv")
+np.random.seed(42)
 
-# 图片目录
-image_dir = DATA_DIR / "image"
+# 加载数据
+images, masks, info = load_data(DATA_DIR)
+print(f"共加载 {len(images)} 张图像")
 
-# 筛选原始图像（不含_aug的）
-original_images = [f for f in image_dir.glob("*.jpg") if "_aug" not in f.name]
-print(f"原始图像数量: {len(original_images)}")
+# 随机挑选4张
+indices = np.random.choice(len(images), 4, replace=False)
 
-# 生成info
-info_data = []
-for img_path in sorted(original_images, key=lambda x: int(x.stem)):
-    img = Image.open(img_path)
-    width, height = img.size
-    image_id = int(img_path.stem)
-    info_data.append({"image_id": image_id, "width": width, "height": height})
+fig, axes = plt.subplots(4, 5, figsize=(15, 12))
 
-info_df = pd.DataFrame(info_data)
+for row, idx in enumerate(indices):
+    img = images[idx]
+    mask = masks[idx]
 
-# 与label.csv合并（保留label.csv的前两列结构）
-result_df = label_df[["image_id"]].copy()
-result_df["dx"] = label_df["dx"]
-result_df["resolution"] = info_df["width"].astype(str) + "*" + info_df["height"].astype(str)
+    # 原图
+    axes[row, 0].imshow(img)
+    axes[row, 0].set_title("Original")
+    axes[row, 0].axis("off")
 
-# 保存
-result_df.to_csv(RESULT_DIR / "info.csv", index=False)
-print(f"已保存到 {RESULT_DIR / 'info.csv'}")
-print(result_df.head(10))
+    # 蒙版
+    axes[row, 1].imshow(mask, cmap="gray")
+    axes[row, 1].set_title("Mask")
+    axes[row, 1].axis("off")
+
+    # 应用蒙版后的图像
+    masked = apply_mask(img, mask)
+    axes[row, 2].imshow(masked.astype(np.uint8))
+    axes[row, 2].set_title("Masked")
+    axes[row, 2].axis("off")
+
+    # 灰度图
+    gray = rgb_to_gray(img)
+    axes[row, 3].imshow(gray, cmap="gray")
+    axes[row, 3].set_title("Grayscale")
+    axes[row, 3].axis("off")
+
+    # 应用蒙版后的灰度图
+    gray_masked = apply_mask(gray, mask)
+    axes[row, 4].imshow(gray_masked, cmap="gray")
+    axes[row, 4].set_title("Gray + Mask")
+    axes[row, 4].axis("off")
+
+plt.tight_layout()
+plt.savefig(RESULT_DIR / "preprocess.jpg", dpi=150)
+plt.close()
+print(f"可视化已保存到 {RESULT_DIR / 'preprocess.jpg'}")
