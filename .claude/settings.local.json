@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(python -c ' *)"
+      "Bash(python -c ' *)",
+      "Bash(python -u test_feature_extraction.py)"
     ]
   }
 }
