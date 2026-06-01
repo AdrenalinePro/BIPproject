@@ -1,12 +1,12 @@
 Classifier: SVM
-Accuracy: 0.5889
+Accuracy: 0.6833
 
               precision    recall  f1-score   support
 
-         mel       0.67      0.48      0.56        63
-          nv       0.56      0.84      0.68        90
-        vasc       0.00      0.00      0.00        27
+         mel       0.63      0.45      0.53        42
+          nv       0.65      0.83      0.73        60
+        vasc       1.00      0.72      0.84        18
 
-    accuracy                           0.59       180
-   macro avg       0.41      0.44      0.41       180
-weighted avg       0.51      0.59      0.53       180
+    accuracy                           0.68       120
+   macro avg       0.76      0.67      0.70       120
+weighted avg       0.70      0.68      0.68       120

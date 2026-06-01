@@ -90,7 +90,7 @@ def load_features():
     return X, y, groups, meta_df
 
 
-def group_stratified_split(meta_df, test_size=0.3, random_state=42):
+def group_stratified_split(meta_df, test_size=0.2, random_state=42):
     """
     分组分层划分：同一 image_id 的所有行（原图+增强）必须落在同一集合。
     分层使用各组的"主标签"（优先取非增强的行的标签；缺省时退回首个出现的标签）。
@@ -128,7 +128,7 @@ def main():
 
     # 分组分层划分
     train_mask, test_mask, train_ids, test_ids = group_stratified_split(
-        meta_df, test_size=0.3, random_state=RANDOM_SEED
+        meta_df, test_size=0.2, random_state=RANDOM_SEED
     )
     assert train_ids.isdisjoint(test_ids), "image_id 出现泄漏：训练集和测试集有交集"
 

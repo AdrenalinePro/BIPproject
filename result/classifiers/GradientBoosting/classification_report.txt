@@ -1,12 +1,12 @@
 Classifier: GradientBoosting
-Accuracy: 0.6167
+Accuracy: 0.7000
 
               precision    recall  f1-score   support
 
-         mel       0.56      0.56      0.56        63
-          nv       0.63      0.69      0.66        90
-        vasc       0.78      0.52      0.62        27
+         mel       0.66      0.55      0.60        42
+          nv       0.67      0.80      0.73        60
+        vasc       1.00      0.72      0.84        18
 
-    accuracy                           0.62       180
-   macro avg       0.65      0.59      0.61       180
-weighted avg       0.62      0.62      0.62       180
+    accuracy                           0.70       120
+   macro avg       0.77      0.69      0.72       120
+weighted avg       0.71      0.70      0.70       120

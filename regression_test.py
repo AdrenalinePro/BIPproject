@@ -78,9 +78,9 @@ try:
     print(f'  y = {y.tolist()}')
     print(f'  groups (image_id) = {groups.tolist()}')
 
-    # --- 3) 验证分组分层划分 (2 张图，30% 测试) ---
+    # --- 3) 验证分组分层划分 (2 张图，20% 测试) ---
     train_mask, test_mask, train_ids, test_ids = group_stratified_split(
-        meta, test_size=0.3, random_state=42
+        meta, test_size=0.2, random_state=42
     )
     print()
     print('=== group_stratified_split 验证 (2 张图) ===')
