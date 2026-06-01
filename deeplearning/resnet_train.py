@@ -13,7 +13,7 @@ import numpy as np
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 DATA_ROOT = "./skin_dataset"
 BATCH_SIZE = 35
-EPOCHS = 12
+EPOCHS = 15
 LR = 6e-5
 NUM_CLASSES = 3
 CLASS_NAMES = ["mel", "nv", "vasc"]
