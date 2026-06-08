@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(python -c ' *)",
-      "Bash(python -u test_feature_extraction.py)"
+      "Bash(python -u test_feature_extraction.py)",
+      "Bash(python -u test_stacking.py)",
+      "Bash(python submit/main.py)"
     ]
   }
 }

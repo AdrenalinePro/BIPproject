@@ -73,3 +73,84 @@ gray_img = rgb_to_gray(images[0])
 ```python
 clean_img, hair_mask = remove_hair(images[0])
 ```
+
+---
+
+# stacking_classifier.py — Stacking 融合分类器
+
+## 概述
+
+5 个基学习器（RF / SVM / KNN / GB / LR）在**不同特征子集**上做"分支降维"，
+1 个元学习器（LR）在 OOF 概率上做最终融合。整体不使用任何深度学习方法，
+分类器限定在 `{RF, SVM, KNN, GB, LR}` 这 5 类中。
+
+## 5 个分支（基学习器）
+
+| Branch | 分类器             | 特征子集                    | 维度 | 降维方式                                      |
+|--------|-------------------|-----------------------------|------|-----------------------------------------------|
+| `rf`   | RandomForest      | 纹理 (LBP 256 + GLCM 12)    | 268  | `SelectKBest(f_classif, k=120)`              |
+| `svm`  | SVC(rbf)          | 颜色 (RGB+HSV+Lab+YCbCr)    | 72   | `StandardScaler` + `SelectKBest(f_classif, k=40)` |
+| `knn`  | KNN               | 形状 (18) + ABCD (7)        | 25   | `StandardScaler`（25 维无需选择）              |
+| `gb`   | GradientBoosting  | 全部                        | 365  | `SelectFromModel(GB, threshold='median')`     |
+| `lr`   | LogisticRegression| 全部                        | 365  | `StandardScaler` + L1 penalty（内置稀疏）      |
+
+所有分支都接 `class_weight='balanced'` 处理类别不平衡。
+
+## 元学习器
+
+`LogisticRegression(C=1.0, class_weight='balanced')`，在 `5 × 3 = 15` 维 OOF 概率上训练。
+经典 stacking 配方（Wolpert 1992），小数据上不容易过拟合。
+
+## 训练流程
+
+**手动 Stacking**（不是 `sklearn.ensemble.StackingClassifier`）：
+原因是该类不接受 `groups` 参数，无法保证同一 `image_id` 的所有行（原图+增广）落在同侧。
+本文件用 `StratifiedGroupKFold(n_splits=5)` 手动实现。
+
+1. `StratifiedGroupKFold(5)` 按 `image_id` 切分训练集
+2. 对每个基学习器：5 折 OOF `predict_proba` → `(n_train, n_classes)` 矩阵
+3. 在完整训练集上重训每个基学习器（用于最终推理）
+4. 把 5 个 OOF 矩阵横向拼成 `(n_train, 15)`，训练元学习器
+
+## 主要函数
+
+| 函数 | 说明 |
+|------|------|
+| `make_branch_rf()` / `make_branch_svm()` / `make_branch_knn()` / `make_branch_gb()` / `make_branch_lr()` | 5 个分支的工厂函数，返回 `Pipeline` |
+| `make_base_learners()` | 返回 `{name: Pipeline}` 字典（5 个基学习器）|
+| `make_meta_learner()` | 元学习器 LR |
+| `fit_stacking_with_groups(X_train, y_train, groups_train, n_splits=5)` | 训练 Stacking，返回 `(fitted_base, meta_learner, oof)` |
+| `predict_stacking(fitted_base, meta_learner, X)` | 推理，返回 `(y_pred, y_proba)` |
+| `save_pipeline(fitted_base, meta_learner)` | 保存到 `result/stacking_pipeline.pkl` |
+
+## 特征列布局
+
+`load_features()` 输出矩阵的列布局（与 `FEATURE_GROUPS` 严格对应）：
+
+```
+[   0 : 268 ]  = 纹理 (LBP 256 + GLCM 12)
+[ 268 : 340 ]  = 颜色 (4 空间 × 3 通道 × 6 统计) = 72
+[ 340 : 358 ]  = 形状 (regionprops 5 + 新增 6 + Hu 矩 7) = 18
+[ 358 : 365 ]  = ABCD (A 1 + B 1 + C 2 + D 1 + 2 辅助) = 7
+总计 365 维
+```
+
+## 运行
+
+```bash
+python code/src/stacking_classifier.py
+```
+
+前置文件：
+- `result/features.csv`（纹理，271 列 = 3 meta + 268 features）
+- `result/color_shape_features.csv`（颜色+形状+ABCD，100 列 = 3 meta + 97 features）
+
+## 输出
+
+- `result/stacking_pipeline.pkl` — 整个 stacking bundle
+  - `fitted_base` 训练好的 5 个基学习器
+  - `meta_learner` 训练好的元学习器
+  - `feature_groups`, `total_feature_dims`, `meta_cols` 等文档字段
+- `result/stacking_confusion_matrix.png` — 测试集混淆矩阵
+
+> 推理脚本 `infer.py`（加载 `stacking_pipeline.pkl` 做预测）待后续写。
