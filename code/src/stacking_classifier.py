@@ -17,6 +17,7 @@ Stacking 融合分类器
   总计 365 维
 """
 import sys
+import argparse
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -273,52 +274,85 @@ def save_pipeline(
 # ==========================================
 # 4. 主程序
 # ==========================================
-def main():
+def main(holdout: bool = False):
+    """
+    主入口。
+
+    参数:
+        holdout: 若 True, 80/20 划分后训练, 并在 holdout 上评估 (调试/开发用)。
+                 若 False (默认), 在**全量数据**上训练, 只保存权重到 result/。
+                 全量训练用于外部评测场景 —— 既然测试集与训练集完全独立,
+                 应当把所有标注样本都用上以获得最强的最终模型。
+    """
     # 1. 加载特征（要求 features.csv 和 color_shape_features.csv 都已是新格式）
     X, y, groups, meta_df = load_features()
     print(f"加载特征矩阵: {X.shape} (纹理 268 + 颜色 72 + 形状 18 + ABCD 7)")
+    print(f"唯一 image_id: {len(np.unique(groups))}, 标签分布: {pd.Series(y).value_counts().to_dict()}")
 
-    # 2. 分组分层划分（80% 训练 / 20% 测试）
-    train_mask, test_mask, train_ids, test_ids = group_stratified_split(
-        meta_df, test_size=0.2, random_state=RANDOM_SEED
-    )
-    assert train_ids.isdisjoint(test_ids), "image_id 出现泄漏"
+    n_classes = len(np.unique(y))
 
-    X_train, X_test = X[train_mask], X[test_mask]
-    y_train, y_test = y[train_mask], y[test_mask]
-    groups_train = groups[train_mask]
+    if holdout:
+        # ==========================================
+        # 调试模式: 80/20 划分, 在 holdout 上评估
+        # ==========================================
+        train_mask, test_mask, train_ids, test_ids = group_stratified_split(
+            meta_df, test_size=0.2, random_state=RANDOM_SEED
+        )
+        assert train_ids.isdisjoint(test_ids), "image_id 出现泄漏"
 
-    print(f"训练集: {X_train.shape[0]} 样本, {len(train_ids)} 唯一 image_id, "
-          f"标签分布 {pd.Series(y_train).value_counts().to_dict()}")
-    print(f"测试集: {X_test.shape[0]} 样本, {len(test_ids)} 唯一 image_id, "
-          f"标签分布 {pd.Series(y_test).value_counts().to_dict()}")
+        X_train, X_test = X[train_mask], X[test_mask]
+        y_train, y_test = y[train_mask], y[test_mask]
+        groups_train = groups[train_mask]
 
-    # 3. 训练 Stacking
-    print("\n开始训练 Stacking 融合分类器 ...")
-    fitted_base, meta_learner, oof = fit_stacking_with_groups(
-        X_train, y_train, groups_train, n_splits=5
-    )
+        print(f"\n[holdout] 训练集: {X_train.shape[0]} 样本, {len(train_ids)} 唯一 image_id, "
+              f"标签分布 {pd.Series(y_train).value_counts().to_dict()}")
+        print(f"[holdout] 测试集: {X_test.shape[0]} 样本, {len(test_ids)} 唯一 image_id, "
+              f"标签分布 {pd.Series(y_test).value_counts().to_dict()}")
 
-    # 4. 评估
-    y_pred, y_proba = predict_stacking(fitted_base, meta_learner, X_test)
-    acc = accuracy_score(y_test, y_pred)
-    print(f"\nStacking Test Accuracy: {acc:.4f}")
-    print(classification_report(y_test, y_pred))
+        fitted_base, meta_learner, oof = fit_stacking_with_groups(
+            X_train, y_train, groups_train, n_splits=5
+        )
 
-    # 5. 混淆矩阵
-    classes = meta_learner.classes_
-    cm = confusion_matrix(y_test, y_pred, labels=classes)
-    plt.figure(figsize=(6, 5))
-    sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                xticklabels=classes, yticklabels=classes)
-    plt.title(f"Stacking Confusion Matrix (acc={acc:.3f})")
-    plt.tight_layout()
-    cm_path = RESULT_DIR / 'stacking_confusion_matrix.png'
-    plt.savefig(cm_path, dpi=150)
-    plt.close()
-    print(f"混淆矩阵: {cm_path}")
+        y_pred, y_proba = predict_stacking(fitted_base, meta_learner, X_test)
+        acc = accuracy_score(y_test, y_pred)
+        print(f"\n[holdout] Stacking Test Accuracy: {acc:.4f}")
+        print(classification_report(y_test, y_pred))
 
-    # 6. 保存权重
+        classes = meta_learner.classes_
+        cm = confusion_matrix(y_test, y_pred, labels=classes)
+        plt.figure(figsize=(6, 5))
+        sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
+                    xticklabels=classes, yticklabels=classes)
+        plt.title(f"Stacking Confusion Matrix (acc={acc:.3f})")
+        plt.tight_layout()
+        cm_path = RESULT_DIR / 'stacking_confusion_matrix.png'
+        plt.savefig(cm_path, dpi=150)
+        plt.close()
+        print(f"[holdout] 混淆矩阵: {cm_path}")
+    else:
+        # ==========================================
+        # 生产模式: 在**全量数据**上训练, 只保存权重
+        # ==========================================
+        # fit_stacking_with_groups 内部仍做 5 折 StratifiedGroupKFold OOF,
+        # 这样元学习器 LR 训练时拿到的是非泄漏的 OOF 概率。
+        # 最终每个基学习器在完整 X 上重训一次, 用于推理。
+        print(f"\n[full-data] 在全量 {X.shape[0]} 样本 (image_id={len(np.unique(groups))}) 上训练 Stacking ...")
+        fitted_base, meta_learner, oof = fit_stacking_with_groups(
+            X, y, groups, n_splits=5
+        )
+
+        # 报告每个基学习器的 5 折 OOF 准确率 (诊断参考)
+        # OOF 列是按 learner.classes_ 顺序排列的, argmax 给出局部索引,
+        # 需用 classes_ 反查回真实标签, 再与 y 比较。
+        print(f"\n[full-data] 各基学习器 OOF (5-fold) 准确率:")
+        for i, (name, fitted_learner) in enumerate(fitted_base.items()):
+            base_oof = oof[:, i * n_classes:(i + 1) * n_classes]
+            classes = fitted_learner.classes_
+            base_pred = classes[np.argmax(base_oof, axis=1)]
+            base_acc = accuracy_score(y, base_pred)
+            print(f"  - {name:5s}: {base_acc:.4f}")
+
+    # 6. 保存权重 (无论哪种模式都做)
     out_path = save_pipeline(fitted_base, meta_learner)
     print(f"\n权重已保存到: {out_path}")
     print(f"  bundle keys: {list(joblib.load(out_path).keys())}")
@@ -328,4 +362,10 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="训练 Stacking 融合分类器")
+    parser.add_argument(
+        '--holdout', action='store_true',
+        help='使用 80/20 划分并评估 (默认: 在全量数据上训练, 只保存权重)',
+    )
+    args = parser.parse_args()
+    main(holdout=args.holdout)

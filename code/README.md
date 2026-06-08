@@ -138,8 +138,20 @@ clean_img, hair_mask = remove_hair(images[0])
 ## 运行
 
 ```bash
+# 默认: 在全量数据上训练 (无 holdout), 只保存权重
 python code/src/stacking_classifier.py
+
+# 可选: 80/20 划分 + 测试集评估 (开发/调试用)
+python code/src/stacking_classifier.py --holdout
 ```
+
+**全量模式**是**生产**路径 —— 既然外部评测有独立测试集，
+应该把所有标注样本都用上以获得最强的最终模型。`fit_stacking_with_groups`
+内部仍做 5 折 StratifiedGroupKFold OOF（这样元学习器训练时拿到的
+是非泄漏的 OOF 概率），最后每个基学习器在完整 X 上重训一次用于推理。
+
+**Holdout 模式**是开发路径 —— 80/20 划分后在 holdout 上评估精度与混淆矩阵，
+不用于最终提交。
 
 前置文件：
 - `result/features.csv`（纹理，271 列 = 3 meta + 268 features）
